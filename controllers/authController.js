@@ -87,12 +87,12 @@ export const userLogin = async (req, res) => {
       };
 
       //To compare passwords
-      const getPassword = await user.password;
+      const getPassword = user.password;
       console.log("Passwords must match,", password, getPassword);
       if (await comparePasswords(password, getPassword)) {
         console.log("This is the user token", token);
         // console.log(mongoose.Schema.Types.ObjectId);
-        await storeRefreshToken(Token._id, refresh_token);
+        await storeRefreshToken(user._id, refresh_token);
         return res.status(200).send({
           success: true,
           message: "User logged in successfully",
@@ -323,7 +323,7 @@ export const vendorLogin = async (req, res) => {
     if (vendor) {
       // Generate JWT token
       const token = jwt.sign(
-        { id: vendor._id, username: vendor.username },
+        { id: vendor._id, companyName: vendor.companyName },
         process.env.JWT_SECRET,
         {
           expiresIn: "1h",
@@ -332,7 +332,7 @@ export const vendorLogin = async (req, res) => {
 
       // res.send({ token });
       const refresh_token = jwt.sign(
-        { id: vendor._id, username: vendor.username },
+        { id: vendor._id, companyName: vendor.companyName },
         process.env.JWT_REFRESH_SECRET,
         {
           expiresIn: "24h",
@@ -344,12 +344,12 @@ export const vendorLogin = async (req, res) => {
       };
 
       //To compare passwords
-      const getPassword = await vendor.password;
+      const getPassword = vendor.password;
       console.log("Passwords must match,", password, getPassword);
       if (await comparePasswords(password, getPassword)) {
         console.log("This is the vendor token", token);
         // console.log(mongoose.Schema.Types.ObjectId);
-        await storeRefreshToken(Token._id, refresh_token);
+        await storeRefreshToken(vendor._id, refresh_token);
         return res.status(200).send({
           success: true,
           message: "Vendor logged in successfully",
