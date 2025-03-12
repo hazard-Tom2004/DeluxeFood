@@ -19,6 +19,7 @@ const vendorSchema = new mongoose.Schema(
         "Snacks",
       ],
       default: [],
+      required: true,
     },
     password: { type: String, required: true },
     tokens: [
@@ -26,12 +27,15 @@ const vendorSchema = new mongoose.Schema(
         type: mongoose.Schema.Types.ObjectId,
         ref: "Token", // This connects a user to multiple tokens
       },
-    ],
-    createdAt: {
-      type: Date,
-      default: Date.now,
-    },
+      {
+        createdAt: {
+          type: Date,
+          default: Date.now,
+        },
+      },
+    ]
   },
+  { timestamps: true },
   { strict: true }
 );
 
