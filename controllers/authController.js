@@ -2,7 +2,7 @@ import User from "../models/userModel.js";
 import Token from "../models/tokenModel.js";
 import Vendor from "../models/vendorModel.js";
 const { hashFn, comparePasswords, sendEmail } = utils;
-import cloudinary from "../config/cloudinary.js"
+import cloudinary from "../config/cloudinary.js";
 import utils from "../utils/utils.js";
 import jwt from "jsonwebtoken";
 import dotenv from "dotenv";
@@ -118,6 +118,33 @@ export const userLogin = async (req, res) => {
   } catch (error) {
     res.status(500).send({ success: false, message: "Server error!", error });
     console.log(error);
+  }
+};
+
+export const changeUsername = async (req, res) => {
+  const { newUsername } = req.body;
+  const userId = req.user._id;
+
+  const user = await User.findById(userId);
+  try {
+    if (!user) {
+      return res
+        .status(404)
+        .send({ succes: false, message: "This user does not exist!" });
+    }
+
+    // Check if the new username is already taken
+    const existingUser = await User.findOne({ username: newUsername });
+    if (existingUser) {
+      return res.status(400).json({ message: "Username is already taken" });
+    }
+    user.username = newUsername;
+    await user.save();
+
+    res.status(200).json({ message: "Username updated successfully", user });
+  } catch (error) {
+    res.status(500).send({ success: false, message: "This is the error" });
+    console.log(error, error.message);
   }
 };
 
@@ -291,15 +318,19 @@ export const vendorRegister = async (req, res) => {
     });
   } catch (error) {
     if (error.code === 11000) {
-      console.log(error)
-      console.log(req.body)
+      console.log(error);
+      console.log(req.body);
       // console.log(Vendor.schema.paths);
       return res.status(400).send({
         success: false,
         message: "Duplicate field error: " + JSON.stringify(error.keyValue),
       });
     }
-    res.status(500).send({ success: false, message: `Server error!, ${error.message}`, error });
+    res.status(500).send({
+      success: false,
+      message: `Server error!, ${error.message}`,
+      error,
+    });
     console.log(error.message);
   }
 };

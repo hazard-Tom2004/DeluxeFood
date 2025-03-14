@@ -1,7 +1,7 @@
 import express from "express"
-import { userRegister, userLogin, userRequestReset, userResetPassword, userLogout, vendorRegister, vendorLogin, vendorRequestReset, vendorResetPassword, vendorLogout } from "../controllers/authController.js";
+import { userRegister, userLogin, userRequestReset, userResetPassword, changeUsername, userLogout, vendorRegister, vendorLogin, vendorRequestReset, vendorResetPassword, vendorLogout } from "../controllers/authController.js";
 import { createFood, deleteFood, getFoodById, updateFood, searchFoodByName, searchFoodByCategory } from "../controllers/foodController.js";
-import { verifyVendor } from "../middlewares/vendorAuth.js";
+import { verifyUser, verifyVendor } from "../middlewares/Auth.js";
 import upload from "../middlewares/multer.js"
 const router = express.Router();
 
@@ -11,6 +11,7 @@ router.post("/login-user", userLogin);
 router.post("/reset-user", userRequestReset);
 router.post("/update-password-user", userResetPassword)
 router.post("/logout-user", userLogout);
+router.put("/change-username", verifyUser, changeUsername);
 //vendor auth
 router.post("/register-vendor", upload.single("picture"), vendorRegister);
 router.post("/login-vendor", vendorLogin);
