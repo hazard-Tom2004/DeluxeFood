@@ -1,4 +1,5 @@
 import Food from "../models/foodModel.js";
+import Vendor from "../models/vendorModel.js"
 import cloudinary from "../config/cloudinary.js";
 import _ from "lodash";
 
@@ -7,16 +8,24 @@ export const createFood = async (req, res) => {
     const { name, price, category, description } = req.body;
 
     try {
-    console.log("Request File:", req.file); // Debugging step
+      console.log("Request File:", req.file); // Debugging step
 
-    if (!req.file) {
-      return res.status(400).json({ success: false, message: "Picture is required" });
+      if (!req.file) {
+        return res
+          .status(400)
+          .json({ success: false, message: "Picture is required" });
+      }
+
+      // Proceed with Cloudinary upload...
+    } catch (error) {
+      res
+        .status(500)
+        .json({
+          success: false,
+          message: "Error creating food",
+          error: error.message,
+        });
     }
-
-    // Proceed with Cloudinary upload...
-  } catch (error) {
-    res.status(500).json({ success: false, message: "Error creating food", error: error.message });
-  }
 
     let imageUrl = "";
     let result = "";
@@ -29,13 +38,20 @@ export const createFood = async (req, res) => {
 
       // console.log("🚀 Uploading to Cloudinary...");
       try {
-
         result = await cloudinary.uploader.upload(fileBase64, {
           folder: "vendor_food_images",
         });
         imageUrl = result.secure_url;
-        console.log("This is the base64 file", fileBase64)
-      } catch (error) { res.status(500).json({ success: false, message: "Error with uploads", error: error.message });}
+        console.log("This is the base64 file", fileBase64);
+      } catch (error) {
+        res
+          .status(500)
+          .json({
+            success: false,
+            message: "Error with uploads",
+            error: error.message,
+          });
+      }
     }
 
     console.log("✅ Cloudinary Response:", result);
@@ -145,7 +161,6 @@ export const updateFood = async (req, res) => {
       imageUrl = food.image;
     }
 
-    
     // Allow only specific fields to be updated
     const allowedUpdates = [
       "name",
@@ -155,7 +170,7 @@ export const updateFood = async (req, res) => {
       "description",
     ];
     const updates = _.pick(req.body, allowedUpdates);
-    
+
     // If image was updated, ensure the new URL is added to updates
     if (imageUrl) {
       updates.image = imageUrl;
@@ -183,29 +198,25 @@ export const getFoodById = async (req, res) => {
   try {
     const { id } = req.params;
 
-      // Populate vendor field to include vendor's name
-      const food = await Food.findById(id).populate("vendor", "name");
+    // Populate vendor field to include vendor's name
+    const food = await Food.findById(id).populate("vendor", "name");
     if (!food) {
       return res
         .status(404)
         .send({ success: false, message: "Food item not found" });
     }
 
-    res
-      .status(200)
-      .send({
-        success: true,
-        message: "Food item retrieved successfully",
-        data: food,
-      });
+    res.status(200).send({
+      success: true,
+      message: "Food item retrieved successfully",
+      data: food,
+    });
   } catch (error) {
-    res
-      .status(500)
-      .send({
-        success: false,
-        message: "Error fetching food item",
-        error: error.message,
-      });
+    res.status(500).send({
+      success: false,
+      message: "Error fetching food item",
+      error: error.message,
+    });
   }
 };
 
@@ -214,44 +225,91 @@ export const searchFoodByName = async (req, res) => {
     const { name } = req.query; // Get the food name from query params
 
     if (!name) {
-      return res.status(400).json({ success: false, message: "Food name is required" });
+      return res
+        .status(400)
+        .json({ success: false, message: "Food name is required" });
     }
 
     // Find foods that match the search term (case-insensitive)
-    const foods = await Food.find({ 
-      name: { $regex: name, $options: "i" } // "i" makes it case-insensitive
+    const foods = await Food.find({
+      name: { $regex: name, $options: "i" }, // "i" makes it case-insensitive
     }).populate("vendor", "name address"); // Populate vendor details (name & address)
 
     if (foods.length === 0) {
-      return res.status(404).json({ success: false, message: "No foods found" });
+      return res
+        .status(404)
+        .json({ success: false, message: "No foods found" });
     }
 
     res.status(200).json({ success: true, foods });
   } catch (error) {
-    res.status(500).json({ success: false, message: "Error searching for food", error: error.message });
+    res
+      .status(500)
+      .json({
+        success: false,
+        message: "Error searching for food",
+        error: error.message,
+      });
   }
 };
-
 
 export const searchFoodByCategory = async (req, res) => {
   try {
     const { category } = req.query; // Get the category from query params
 
     if (!category) {
-      return res.status(400).json({ success: false, message: "Category is required" });
+      return res
+        .status(400)
+        .json({ success: false, message: "Category is required" });
     }
 
     // Find foods that belong to the given category (case-insensitive)
-    const foods = await Food.find({ 
-      category: { $regex: category, $options: "i" } 
+    const foods = await Food.find({
+      category: { $regex: category, $options: "i" },
     }).populate("vendor", "name address");
 
     if (foods.length === 0) {
-      return res.status(404).json({ success: false, message: "No foods found in this category" });
+      return res
+        .status(404)
+        .json({ success: false, message: "No foods found in this category" });
     }
 
     res.status(200).json({ success: true, foods });
   } catch (error) {
-    res.status(500).json({ success: false, message: "Error fetching foods", error: error.message });
+    res
+      .status(500)
+      .json({
+        success: false,
+        message: "Error fetching foods",
+        error: error.message,
+      });
+  }
+};
+
+
+export const filterFoodsByPrice = async (req, res) => {
+  try {
+    const { minPrice, maxPrice } = req.query;
+
+    // Construct a dynamic filter
+    let filter = {};
+    if (minPrice) filter.price = { ...filter.price, $gte: Number(minPrice) };
+    if (maxPrice) filter.price = { ...filter.price, $lte: Number(maxPrice) };
+
+    // Fetch foods based on the price range
+    const foods = await Food.find(filter);
+
+    res.status(200).send({
+      success: true,
+      count: foods.length,
+      foods,
+    });
+  } catch (error) {
+    console.log(error);
+    res.status(500).send({
+      success: false,
+      message: "Server error",
+      error: error.message,
+    });
   }
 };

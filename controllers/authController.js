@@ -7,6 +7,7 @@ import utils from "../utils/utils.js";
 import jwt from "jsonwebtoken";
 import dotenv from "dotenv";
 import crypto from "crypto";
+import bcrypt from "bcryptjs";
 
 dotenv.config();
 
@@ -83,7 +84,7 @@ export const userLogin = async (req, res) => {
       );
 
       const storeRefreshToken = async (userId, refreshToken) => {
-        await Token.create({ userId, token: refreshToken });
+        await Token.create({ userId, token: refreshToken, type: "refresh" });
       };
 
       //To compare passwords
@@ -118,6 +119,60 @@ export const userLogin = async (req, res) => {
   } catch (error) {
     res.status(500).send({ success: false, message: "Server error!", error });
     console.log(error);
+  }
+};
+
+export const changeUserPassword = async (req, res) => {
+  try {
+    const { oldPassword, newPassword, confirmNewPassword } = req.body;
+    const userId = req.user.id; // Extracted from verifyToken middleware
+    console.log(userId);
+
+    // Ensure all fields are provided
+    if (!oldPassword || !newPassword || !confirmNewPassword) {
+      return res
+        .status(400)
+        .send({ success: false, message: "All fields are required" });
+    }
+
+    const user = await User.findById(userId);
+    // Compare old password with the stored hash
+    const isMatch = await bcrypt.compare(oldPassword, user.password);
+    if (!isMatch) {
+      return res
+        .status(400)
+        .send({ success: false, message: "Old password is incorrect" });
+    }
+
+    // Check if new password and confirm password match
+    if (newPassword !== confirmNewPassword) {
+      return res
+        .status(400)
+        .send({ success: false, message: "New passwords do not match" });
+    }
+
+    // Find the user by ID
+    if (!user) {
+      return res
+        .status(404)
+        .send({ success: false, message: "User not found" });
+    }
+
+    // Hash the new password
+    const hashedPassword = await hashFn(newPassword);
+
+    // Update user's password
+    user.password = hashedPassword;
+    await user.save();
+
+    res
+      .status(200)
+      .send({ success: true, message: "Password changed successfully" });
+  } catch (error) {
+    console.log(user);
+    res
+      .status(500)
+      .send({ success: false, message: "Server error", error: error.message });
   }
 };
 
@@ -167,7 +222,7 @@ export const userLogout = async (req, res) => {
 //forgot password logic
 export const userRequestReset = async (req, res) => {
   const { email } = req.body;
-  console.log("Request body", email);
+  console.log("Request body:", email);
   try {
     // ensure all fields are provided
     if (!email) {
@@ -188,20 +243,23 @@ export const userRequestReset = async (req, res) => {
     // Generate reset token and expiration
     const userResetToken = await crypto.randomBytes(32).toString("hex");
     console.log(userResetToken);
-    const resetTokenExpiration = new Date(Date.now() + 3600000); // 1 hour from now
+    // const resetTokenExpiration = new Date(Date.now() + 3600000); // 1 hour from now
 
     // Update user record with the token
-    const id = user._id;
-    const replace = {
-      $set: {
-        userResetToken: resetTokenExpiration,
+    await Token.findOneAndUpdate(
+      { userId: user._id, type: "reset" },
+      {
+        userId: user._id,
+        token: userResetToken,
+        type: "reset",
+        createdAt: Date.now(), // Ensures expiration works
       },
-    };
-    const updated = await Token.updateOne({ id, replace });
+      { upsert: true, new: true } // Create if not exist, return updated
+    );
 
     // Send reset email
-    const resetLink = `${process.env.FRONTEND_URL}/reset-password/${userResetToken}`;
-    console.log("This is the user email", email);
+    const resetLink = `${process.env.FRONTEND_URL}/auth/reset-password?token=${userResetToken}`;
+    console.log("This is the user email", email, resetLink);
     await sendEmail(
       email || "tom3525001@gmail.com",
       "Password Reset",
@@ -211,6 +269,7 @@ export const userRequestReset = async (req, res) => {
     res.status(200).send({
       success: true,
       message: "Reset link sent to your email.",
+      userResetToken,
     });
   } catch (error) {
     res.status(500).send({
@@ -223,35 +282,75 @@ export const userRequestReset = async (req, res) => {
   }
 };
 
+export const verifyUserResetToken = async (req, res) => {
+  const { token } = req.query; // Token from URL
+
+  try {
+    console.log("Token from request:", token);
+
+    const resetToken = await Token.findOne({ token, type: "reset" });
+
+    console.log("Token from database:", resetToken);
+
+    if (!resetToken) {
+      return res
+        .status(400)
+        .send({ success: false, message: "Invalid or expired token" });
+    }
+
+    // Check token expiration
+    const now = new Date();
+    const expirationTime = resetToken.createdAt.getTime() + 3600000; // 1 hour
+    console.log("Token Expiration Time:", new Date(expirationTime));
+    console.log("Current Time:", now);
+
+    if (now.getTime() > expirationTime) {
+      return res
+        .status(400)
+        .send({ success: false, message: "Token has expired" });
+    }
+
+    res.status(200).json({ success: true, message: "Token is valid", userId: resetToken.userId });
+  } catch (error) {
+    console.error("Error verifying token:", error);
+    res
+      .status(500)
+      .send({ success: false, message: "Server error", error: error.message });
+  }
+};
+
 export const userResetPassword = async (req, res) => {
-  const { token, newPassword } = req.body;
+  const { token } = req.query
+  const { newPassword } = req.body;
   try {
     // Find user by token
-    const user = await User.findOne(token);
-    if (!user || new Date(user.reset_token_expiration) < new Date())
+    const resetToken = await Token.findOne({ token, type: "reset" });
+    if (
+      !resetToken ||
+      new Date(resetToken.reset_token_expiration) < new Date()
+    )
       return res.status(400).send({
         success: false,
         message: "Invalid or expired token.",
       });
 
+    // Find the user by the userId stored in the Token model
+    const user = await User.findById(resetToken.userId);
+
+    if (!user) {
+      return res
+        .status(404)
+        .json({ success: false, message: "User not found" });
+    }
+
     //hash new password
     const hashedPassword = await hashFn(newPassword);
 
-    // Update user's password and clear the token
-    const id = User._id;
-    const updatePassword = {
-      $set: {
-        password: hashedPassword,
-      },
-    };
-    const updateToken = {
-      reset_token: "",
-      reset_token_expiration: "",
-    };
+    user.password = hashedPassword; // You should hash this before saving
+    await user.save();
 
-    const updatedPassword = await User.updateOne(id, updatePassword);
-    const updatedtoken = await Token.updateOne(id, updateToken);
-    // await updated.save();
+    // Delete the token after successful reset
+    await Token.deleteOne({ _id: resetToken._id });
 
     res.status(200).send({
       success: true,
@@ -371,7 +470,7 @@ export const vendorLogin = async (req, res) => {
       );
 
       const storeRefreshToken = async (userId, refreshToken) => {
-        await Token.create({ userId, token: refreshToken });
+        await Token.create({ userId, token: refreshToken, type: "refresh" });
       };
 
       //To compare passwords
@@ -406,6 +505,60 @@ export const vendorLogin = async (req, res) => {
   } catch (error) {
     res.status(500).send({ success: false, message: "Server error!", error });
     console.log(error);
+  }
+};
+
+export const changeVendorPassword = async (req, res) => {
+  try {
+    const { oldPassword, newPassword, confirmNewPassword } = req.body;
+    const vendorId = req.user.id; // Extracted from verifyToken middleware
+    console.log(vendorId);
+
+    // Ensure all fields are provided
+    if (!oldPassword || !newPassword || !confirmNewPassword) {
+      return res
+        .status(400)
+        .send({ success: false, message: "All fields are required" });
+    }
+
+    const vendor = await Vendor.findById(vendorId);
+    // Compare old password with the stored hash
+    const isMatch = await bcrypt.compare(oldPassword, vendor.password);
+    if (!isMatch) {
+      return res
+        .status(400)
+        .send({ success: false, message: "Old password is incorrect" });
+    }
+
+    // Check if new password and confirm password match
+    if (newPassword !== confirmNewPassword) {
+      return res
+        .status(400)
+        .send({ success: false, message: "New passwords do not match" });
+    }
+
+    // Find the user by ID
+    if (!vendor) {
+      return res
+        .status(404)
+        .send({ success: false, message: "Vendor not found" });
+    }
+
+    // Hash the new password
+    const hashedPassword = await hashFn(newPassword);
+
+    // Update user's password
+    vendor.password = hashedPassword;
+    await vendor.save();
+
+    res
+      .status(200)
+      .send({ success: true, message: "Password changed successfully" });
+    console.log(vendor);
+  } catch (error) {
+    res
+      .status(500)
+      .send({ success: false, message: "Server error", error: error.message });
   }
 };
 
@@ -447,21 +600,26 @@ export const vendorRequestReset = async (req, res) => {
     }
 
     // Generate reset token and expiration
+    // Generate reset token and expiration
     const vendorResetToken = await crypto.randomBytes(32).toString("hex");
     console.log(vendorResetToken);
-    const resetTokenExpiration = new Date(Date.now() + 3600000); // 1 hour from now
+    // const resetTokenExpiration = new Date(Date.now() + 3600000); // 1 hour from now
 
     // Update user record with the token
-    const id = vendor._id;
-    const replace = {
-      $set: {
-        resetToken: resetTokenExpiration,
+    await Token.findOneAndUpdate(
+      { userId: vendor._id, type: "reset" },
+      {
+        userId: vendor._id,
+        token: vendorResetToken,
+        type: "reset",
+        createdAt: Date.now(), // Ensures expiration works
       },
-    };
-    const updated = await Token.updateOne({ id, replace });
+      { upsert: true, new: true } // Create if not exist, return updated
+    );;
 
     // Send reset email
-    const resetLink = `${process.env.FRONTEND_URL}/reset-password/${vendorResetToken}`;
+    const resetLink = `${process.env.FRONTEND_URL}/auth/reset-password/${vendorResetToken}`;
+    console.log(resetLink)
     console.log("This is the vendor email", email);
     await sendEmail(
       email || "tom3525001@gmail.com",
@@ -472,6 +630,7 @@ export const vendorRequestReset = async (req, res) => {
     res.status(200).send({
       success: true,
       message: "Reset link sent to your email.",
+      vendorResetToken
     });
   } catch (error) {
     res.status(500).send({
@@ -481,6 +640,43 @@ export const vendorRequestReset = async (req, res) => {
     });
     // next(error)
     console.log(error);
+  }
+};
+
+export const verifyVendorResetToken = async (req, res) => {
+  const { token } = req.query; // Token from URL
+
+  try {
+    console.log("Token from request:", token);
+
+    const resetToken = await Token.findOne({ token, type: "reset" });
+
+    console.log("Token from database:", resetToken);
+
+    if (!resetToken) {
+      return res
+        .status(400)
+        .send({ success: false, message: "Invalid or expired token" });
+    }
+
+    // Check token expiration
+    const now = new Date();
+    const expirationTime = resetToken.createdAt.getTime() + 3600000; // 1 hour
+    console.log("Token Expiration Time:", new Date(expirationTime));
+    console.log("Current Time:", now);
+
+    if (now.getTime() > expirationTime) {
+      return res
+        .status(400)
+        .send({ success: false, message: "Token has expired" });
+    }
+
+    res.status(200).json({ success: true, message: "Token is valid", vendorId: resetToken.userId });
+  } catch (error) {
+    console.error("Error verifying token:", error);
+    res
+      .status(500)
+      .send({ success: false, message: "Server error", error: error.message });
   }
 };
 
@@ -527,32 +723,3 @@ export const vendorResetPassword = async (req, res) => {
     });
   }
 };
-
-// export const uploadImage = async (req, res) => {
-//   try {
-//     if (!req.file) {
-//       return res.status(400).send({ message: "No file uploaded" });
-//     }
-
-//     const imageUrl = req.file ? req.file.secure_url : null;
-
-//     // Convert file buffer to base64
-//     const fileBase64 = `data:${
-//       req.file.mimetype
-//     };base64,${req.file.buffer.toString("base64")}`;
-
-//     // Upload to Cloudinary
-//     const result = await cloudinary.uploader.upload(fileBase64, {
-//       folder: "uploads", // Optional: Set Cloudinary folder
-//     });
-
-//     res.send({
-//       message: "Upload successful",
-//       imageUrl: result.secure_url,
-//     });
-//   } catch (error) {
-//     res.status(500).send({ success: false,
-//       message: error.message
-//     });
-//   }
-// };

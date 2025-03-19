@@ -14,10 +14,18 @@ const tokenSchema = new mongoose.Schema({
       type: String,
       required: true,
     },
+    type: {
+      type: String,
+      enum: ["refresh", "reset"], // Differentiate token types
+      required: true,
+    },
     createdAt: {
       type: Date,
       default: Date.now,
-      expires: "7d", // Automatically delete after 7 days
+      expires: function () {
+        return this.type === "refresh" ? 86400 : 3600; // Refresh token expires in 24h, Reset token in 1h
+      }, 
+
     },
   });
   
