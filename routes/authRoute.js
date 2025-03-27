@@ -1,6 +1,6 @@
 import express from "express"
 import { userRegister, userLogin, changeUserPassword, userRequestReset, verifyUserResetToken, userResetPassword, changeUsername, userLogout, vendorRegister, vendorLogin, changeVendorPassword, vendorRequestReset, verifyVendorResetToken, vendorResetPassword, vendorLogout } from "../controllers/authController.js";
-import { createFood, deleteFood, getFoodById, updateFood, searchFoodByName, searchFoodByCategory, filterFoodsByPrice } from "../controllers/foodController.js";
+import { createFood, deleteFood, getFoodById, updateFood, searchFoodByName, searchFoodByCategory, filterFoodsByPrice, getAllFoods } from "../controllers/foodController.js";
 import { searchVendorByCompanyName, getVendorById, getAllVendors } from "../controllers/vendorController.js" 
 import { verifyUser, verifyVendor, verifyToken } from "../middlewares/Auth.js";
 import upload from "../middlewares/multer.js"
@@ -31,6 +31,7 @@ router.delete("/delete-food/:id", verifyVendor, deleteFood);
 router.get("/get-food-by-name", searchFoodByName);
 router.get("/get-food-by-category", searchFoodByCategory);
 router.get("/filter-by-price", filterFoodsByPrice);
+router.get("/get-all-foods", getAllFoods)
 //getting vendors
 router.get("/get-vendor-by-name", searchVendorByCompanyName);
 router.get("/get-vendor/:id", getVendorById)

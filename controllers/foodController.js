@@ -1,5 +1,5 @@
 import Food from "../models/foodModel.js";
-import Vendor from "../models/vendorModel.js"
+import Vendor from "../models/vendorModel.js";
 import cloudinary from "../config/cloudinary.js";
 import _ from "lodash";
 
@@ -18,13 +18,11 @@ export const createFood = async (req, res) => {
 
       // Proceed with Cloudinary upload...
     } catch (error) {
-      res
-        .status(500)
-        .json({
-          success: false,
-          message: "Error creating food",
-          error: error.message,
-        });
+      res.status(500).json({
+        success: false,
+        message: "Error creating food",
+        error: error.message,
+      });
     }
 
     let imageUrl = "";
@@ -44,13 +42,11 @@ export const createFood = async (req, res) => {
         imageUrl = result.secure_url;
         console.log("This is the base64 file", fileBase64);
       } catch (error) {
-        res
-          .status(500)
-          .json({
-            success: false,
-            message: "Error with uploads",
-            error: error.message,
-          });
+        res.status(500).json({
+          success: false,
+          message: "Error with uploads",
+          error: error.message,
+        });
       }
     }
 
@@ -243,13 +239,11 @@ export const searchFoodByName = async (req, res) => {
 
     res.status(200).json({ success: true, foods });
   } catch (error) {
-    res
-      .status(500)
-      .json({
-        success: false,
-        message: "Error searching for food",
-        error: error.message,
-      });
+    res.status(500).json({
+      success: false,
+      message: "Error searching for food",
+      error: error.message,
+    });
   }
 };
 
@@ -263,10 +257,15 @@ export const searchFoodByCategory = async (req, res) => {
         .json({ success: false, message: "Category is required" });
     }
 
-    // Find foods that belong to the given category (case-insensitive)
-    const foods = await Food.find({
-      category: { $regex: category, $options: "i" },
-    }).populate("vendor", "name address");
+    let foods;
+    if (category && category.toLowerCase() === "all") {
+      // If "all" is selected, return random foods
+      foods = await Food.aggregate([{ $sample: { size: 10 } }]); // Get 10 random foods
+    } else {
+      foods = await Food.find({
+        category: { $regex: category, $options: "i" },
+      }).populate("vendor", "name address");
+    }
 
     if (foods.length === 0) {
       return res
@@ -274,18 +273,37 @@ export const searchFoodByCategory = async (req, res) => {
         .json({ success: false, message: "No foods found in this category" });
     }
 
-    res.status(200).json({ success: true, foods });
+    res.status(200).json({
+      success: true,
+      message: "These are the foods in this category",
+      foods,
+    });
   } catch (error) {
-    res
-      .status(500)
-      .json({
-        success: false,
-        message: "Error fetching foods",
-        error: error.message,
-      });
+    res.status(500).json({
+      success: false,
+      message: "Error fetching foods",
+      error: error.message,
+    });
   }
 };
 
+export const getAllFoods = async (req, res) => {
+  try {
+    const foods = await Food.find().populate("vendor", "companyName"); // Fetch all foods and populate vendor name
+    res
+      .status(200)
+      .json({
+        success: true,
+        messsage: "These are all the foods in the database",
+        data: foods,
+      }); console.log("success!")
+  } catch (error) {
+    res
+      .status(500)
+      .json({ success: false, message: "Server error", error: error.message });
+      console.log(error);
+  }
+};
 
 export const filterFoodsByPrice = async (req, res) => {
   try {
@@ -301,6 +319,7 @@ export const filterFoodsByPrice = async (req, res) => {
 
     res.status(200).send({
       success: true,
+      message: "These are the foods around your desired price",
       count: foods.length,
       foods,
     });
