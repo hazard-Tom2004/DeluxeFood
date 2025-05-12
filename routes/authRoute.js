@@ -28,12 +28,12 @@ router.post("/create-food", verifyVendor, upload.single("picture"), createFood);
 router.get("/get-food/:id", getFoodById);
 router.put("/edit-food/:id", verifyVendor, upload.single("picture"), updateFood);
 router.delete("/delete-food/:id", verifyVendor, deleteFood);
-router.get("/get-food-by-name", searchFoodByName);
-router.get("/get-food-by-category", searchFoodByCategory);
+router.get("/search-food-by-name", searchFoodByName);
+router.get("/search-food-by-category", searchFoodByCategory);
 router.get("/filter-by-price", filterFoodsByPrice);
 router.get("/get-all-foods", getAllFoods)
 //getting vendors
-router.get("/get-vendor-by-name", searchVendorByCompanyName);
+router.get("/search-vendor-by-company-name", searchVendorByCompanyName);
 router.get("/get-vendor/:id", getVendorById)
 router.get("/get-all-vendor", getAllVendors);
 

@@ -24,6 +24,12 @@ export const userRegister = async (req, res) => {
         .status(400)
         .send({ success: false, message: "User already exists" });
 
+    if (!username || !email || !password || !phone) {
+      return res
+        .status(400)
+        .send({ success: false, message: "All fields required!" });
+    }
+
     // Create user
     const user = new User({ username, email, password: hashedPassword, phone });
     await user.save();
@@ -310,7 +316,11 @@ export const verifyUserResetToken = async (req, res) => {
         .send({ success: false, message: "Token has expired" });
     }
 
-    res.status(200).json({ success: true, message: "Token is valid", userId: resetToken.userId });
+    res.status(200).json({
+      success: true,
+      message: "Token is valid",
+      userId: resetToken.userId,
+    });
   } catch (error) {
     console.error("Error verifying token:", error);
     res
@@ -320,15 +330,12 @@ export const verifyUserResetToken = async (req, res) => {
 };
 
 export const userResetPassword = async (req, res) => {
-  const { token } = req.query
+  const { token } = req.query;
   const { newPassword } = req.body;
   try {
     // Find user by token
     const resetToken = await Token.findOne({ token, type: "reset" });
-    if (
-      !resetToken ||
-      new Date(resetToken.reset_token_expiration) < new Date()
-    )
+    if (!resetToken || new Date(resetToken.reset_token_expiration) < new Date())
       return res.status(400).send({
         success: false,
         message: "Invalid or expired token.",
@@ -368,7 +375,8 @@ export const userResetPassword = async (req, res) => {
 
 //handling the vendor authentication
 export const vendorRegister = async (req, res) => {
-  const { name, companyName, email, address, preference, password } = req.body;
+  const { name, companyName, email, phone, address, preference, password } =
+    req.body;
 
   const hashedPassword = await hashFn(password);
 
@@ -380,7 +388,22 @@ export const vendorRegister = async (req, res) => {
         .status(400)
         .send({ success: false, message: "Vendor already exists" });
 
+    if (
+      !name ||
+      !companyName ||
+      !email ||
+      !phone ||
+      !address ||
+      !preference ||
+      !password
+    ) {
+      return res
+        .status(400)
+        .send({ success: false, message: "All fields required!" });
+    }
+
     let imageUrl = "";
+
     if (req.file) {
       const fileBase64 = `data:${
         req.file.mimetype
@@ -396,6 +419,7 @@ export const vendorRegister = async (req, res) => {
       name,
       companyName,
       email,
+      phone,
       picture: imageUrl,
       address,
       preference,
@@ -403,17 +427,11 @@ export const vendorRegister = async (req, res) => {
     });
     await vendor.save();
 
-    res.status(201).send({
+    res.status(201).send(
+      {
       success: true,
       message: "Vendor registered successfully",
-      data: {
-        name: vendor.name,
-        companyName: vendor.companyName,
-        email: vendor.email,
-        picture: vendor.picture,
-        address: vendor.address,
-        preference: vendor.preference,
-      },
+      data: vendor,
     });
   } catch (error) {
     if (error.code === 11000) {
@@ -615,11 +633,11 @@ export const vendorRequestReset = async (req, res) => {
         createdAt: Date.now(), // Ensures expiration works
       },
       { upsert: true, new: true } // Create if not exist, return updated
-    );;
+    );
 
     // Send reset email
     const resetLink = `${process.env.FRONTEND_URL}/auth/reset-password/${vendorResetToken}`;
-    console.log(resetLink)
+    console.log(resetLink);
     console.log("This is the vendor email", email);
     await sendEmail(
       email || "tom3525001@gmail.com",
@@ -630,7 +648,7 @@ export const vendorRequestReset = async (req, res) => {
     res.status(200).send({
       success: true,
       message: "Reset link sent to your email.",
-      vendorResetToken
+      vendorResetToken,
     });
   } catch (error) {
     res.status(500).send({
@@ -671,7 +689,11 @@ export const verifyVendorResetToken = async (req, res) => {
         .send({ success: false, message: "Token has expired" });
     }
 
-    res.status(200).json({ success: true, message: "Token is valid", vendorId: resetToken.userId });
+    res.status(200).json({
+      success: true,
+      message: "Token is valid",
+      vendorId: resetToken.userId,
+    });
   } catch (error) {
     console.error("Error verifying token:", error);
     res
@@ -694,21 +716,11 @@ export const vendorResetPassword = async (req, res) => {
     //hash new password
     const hashedPassword = await hashFn(newPassword);
 
-    // Update user's password and clear the token
-    const id = Vendor._id;
-    const updatePassword = {
-      $set: {
-        password: hashedPassword,
-      },
-    };
-    const updateToken = {
-      reset_token: "",
-      reset_token_expiration: "",
-    };
+    vendor.password = hashedPassword; // You should hash this before saving
+    await vendor.save();
 
-    const updatedPassword = await Vendor.updateOne(id, updatePassword);
-    const updatedtoken = await Token.updateOne(id, updateToken);
-    // await updated.save();
+    // Delete the token after successful reset
+    await Token.deleteOne({ _id: resetToken._id });
 
     res.status(200).send({
       success: true,

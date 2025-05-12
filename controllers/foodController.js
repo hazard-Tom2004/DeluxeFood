@@ -140,7 +140,7 @@ export const updateFood = async (req, res) => {
     if (req.file) {
       // Delete the previous image from Cloudinary if it exists
       if (food.image) {
-        const imageId = food.image.split("/").pop().split(".")[0]; // Get image public ID from URL
+        const imageId = food.picture.split("/").pop().split(".")[0]; // Get image public ID from URL
         await cloudinary.uploader.destroy(imageId); // Delete the old image from Cloudinary
       }
 
@@ -154,7 +154,7 @@ export const updateFood = async (req, res) => {
       imageUrl = result.secure_url; // Store the new image URL
     } else {
       // If no image is uploaded, keep the current image URL
-      imageUrl = food.image;
+      imageUrl = food.picture;
     }
 
     // Allow only specific fields to be updated
@@ -169,7 +169,7 @@ export const updateFood = async (req, res) => {
 
     // If image was updated, ensure the new URL is added to updates
     if (imageUrl) {
-      updates.image = imageUrl;
+      updates.picture = imageUrl;
     }
     // Update the food item with new data
     const updatedFood = await Food.findByIdAndUpdate(id, updates, {
